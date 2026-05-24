@@ -3,12 +3,13 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload, selectinload
 
 from app.core.database import get_db
+from app.core.notify import email_notifications
 from app.core.security import require_auth
 from app.deps import (
     course_visibility_clause,
@@ -19,8 +20,7 @@ from app.deps import (
 )
 from app.models import Course, Enrollment, Prediction, Student, User
 from app.schemas import PredictionCreate, PredictRequest
-from ml.features import build_features
-from ml.predict import StudentPredictor
+from app.services.prediction_service import run_prediction_for_student
 
 
 router = APIRouter(prefix="/api/predictions", tags=["predictions"])
@@ -93,52 +93,36 @@ async def list_predictions(
 @router.post("/generate")
 async def generate_prediction(
     body: PredictRequest,
+    background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
     auth: dict = Depends(require_auth),
 ):
     """Run the trained ML model against the latest data for a student."""
     student = await _load_student(body.student_id, db, auth)
-    enrollments = filter_enrollments_for_role(student.enrollments, auth)
-
+    # Visibility check (the loader applies it). If a course_id was given,
+    # make sure it belongs to an enrollment this caller can see.
     if body.course_id:
-        target = next((e for e in enrollments if e.course_id == body.course_id), None)
-        if not target:
+        enrollments = filter_enrollments_for_role(student.enrollments, auth)
+        if not any(e.course_id == body.course_id for e in enrollments):
             raise HTTPException(status_code=404, detail="Course enrollment not found for student")
-        target_enrollments = [target]
-    else:
-        target_enrollments = enrollments
 
-    grades = [g for e in target_enrollments for g in e.grades]
-    attendance = [a for e in target_enrollments for a in e.attendance_records]
-    if not grades:
-        raise HTTPException(status_code=422, detail="Not enough grade data to generate a prediction.")
-
-    credit_hours = (
-        target_enrollments[0].course.credit_hours
-        if target_enrollments and target_enrollments[0].course
-        else 3
-    )
-    features = build_features(grades, attendance, credit_hours=credit_hours)
-
-    try:
-        predictor = StudentPredictor.get()
-    except FileNotFoundError as exc:
-        raise HTTPException(status_code=503, detail=f"Model not trained yet: {exc}")
-
-    output = predictor.predict(features)
-
-    prediction = Prediction(
+    prediction, notes = await run_prediction_for_student(
+        db,
         student_id=body.student_id,
         course_id=body.course_id,
-        predicted_grade=output["predicted_grade"],
-        pass_probability=output["pass_probability"],
-        risk_level=output["risk_level"],
-        factors=output["factors"],
-        recommendations=output["recommendations"],
-        ai_summary=output["summary"],
+        student=student,
     )
-    db.add(prediction)
+    if prediction is None:
+        raise HTTPException(
+            status_code=503,
+            detail="Could not run prediction. Either the model isn't trained "
+                   "(run `python -m ml.train`) or the student has no grade data yet.",
+        )
+
     await db.commit()
+    if notes:
+        background_tasks.add_task(email_notifications, [n.id for n in notes])
+
     return await _reload_prediction(prediction.id, db)
 
 

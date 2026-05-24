@@ -183,6 +183,21 @@ create table notifications (
 create index idx_notifications_recipient on notifications(recipient_id);
 create index idx_notifications_unread on notifications(recipient_id) where is_read = false;
 
+-- ============================================================
+-- PASSWORD RESET TOKENS
+-- ============================================================
+create table password_reset_tokens (
+  id         uuid primary key default uuid_generate_v4(),
+  user_id    uuid not null references users(id) on delete cascade,
+  token      text unique not null,
+  expires_at timestamptz not null,
+  used       boolean not null default false,
+  created_at timestamptz not null default now()
+);
+
+create index idx_password_reset_token on password_reset_tokens(token);
+create index idx_password_reset_user  on password_reset_tokens(user_id);
+
 -- Authorization is enforced in the FastAPI layer via app/deps.py
 -- (role + school scoping). The backend connects as a single Postgres
 -- user, so row-level security is intentionally not used here.

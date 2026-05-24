@@ -9,9 +9,9 @@ from sqlalchemy.orm import joinedload
 
 from app.core.database import get_db
 from app.models import Course, User, AcademicYear
-from app.schemas import CourseCreate
+from app.schemas import CourseCreate, CourseUpdate
 from app.core.security import require_auth, require_role
-from app.deps import course_visibility_clause, resolve_school_scope
+from app.deps import auth_school_id, course_visibility_clause, resolve_school_scope
 
 router = APIRouter(prefix="/api/courses", tags=["courses"])
 
@@ -100,6 +100,68 @@ async def create_course(
     )
     course = refreshed.unique().scalar_one()
     return _format_course(course)
+
+
+@router.put("/{course_id}")
+async def update_course(
+    course_id: uuid.UUID,
+    body: CourseUpdate,
+    db: AsyncSession = Depends(get_db),
+    auth: dict = Depends(require_role("admin")),
+):
+    result = await db.execute(
+        select(Course)
+        .options(joinedload(Course.lecturer), joinedload(Course.academic_year))
+        .where(Course.id == course_id)
+    )
+    course = result.unique().scalar_one_or_none()
+    if not course:
+        raise HTTPException(status_code=404, detail="Course not found")
+
+    school_id = auth_school_id(auth)
+    if school_id and course.school_id != school_id:
+        raise HTTPException(status_code=403, detail="Course is in another school")
+
+    if body.lecturer_id is not None:
+        lecturer_check = await db.execute(
+            select(User).where(User.id == body.lecturer_id, User.role == "lecturer")
+        )
+        lecturer = lecturer_check.scalar_one_or_none()
+        if not lecturer:
+            raise HTTPException(status_code=422, detail="Selected user is not a lecturer")
+        if school_id and lecturer.school_id != school_id:
+            raise HTTPException(status_code=403, detail="Lecturer belongs to another school")
+
+    for field, value in body.model_dump(exclude_unset=True).items():
+        setattr(course, field, value)
+
+    await db.commit()
+    refreshed = await db.execute(
+        select(Course)
+        .options(joinedload(Course.lecturer), joinedload(Course.academic_year))
+        .where(Course.id == course.id)
+    )
+    return _format_course(refreshed.unique().scalar_one())
+
+
+@router.delete("/{course_id}")
+async def delete_course(
+    course_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    auth: dict = Depends(require_role("admin")),
+):
+    result = await db.execute(select(Course).where(Course.id == course_id))
+    course = result.scalar_one_or_none()
+    if not course:
+        raise HTTPException(status_code=404, detail="Course not found")
+
+    school_id = auth_school_id(auth)
+    if school_id and course.school_id != school_id:
+        raise HTTPException(status_code=403, detail="Course is in another school")
+
+    await db.delete(course)
+    await db.commit()
+    return {"success": True}
 
 
 # ── Helpers ──────────────────────────────────────────────────────────────────

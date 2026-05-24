@@ -273,3 +273,21 @@ class Notification(Base):
         ),
         Index("idx_notifications_recipient", "recipient_id"),
     )
+
+
+# ── Password reset tokens ────────────────────────────────────────────────────
+
+class PasswordResetToken(Base):
+    __tablename__ = "password_reset_tokens"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    token = Column(Text, unique=True, nullable=False)
+    expires_at = Column(DateTime(timezone=True), nullable=False)
+    used = Column(Boolean, nullable=False, default=False)
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+
+    __table_args__ = (
+        Index("idx_password_reset_token", "token"),
+        Index("idx_password_reset_user", "user_id"),
+    )

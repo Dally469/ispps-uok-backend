@@ -12,7 +12,19 @@ class Settings(BaseSettings):
 
     model_artifact_path: str = str(Path(__file__).resolve().parents[2] / "ml" / "artifacts" / "model.joblib")
 
-    model_config = {"env_file": ".env", "env_file_encoding": "utf-8"}
+    # ── Frontend URL — used to build links inside emails ─────────────────────
+    frontend_base_url: str = "http://localhost:3000"
+
+    # ── SMTP — set these in .env to enable outbound email ────────────────────
+    smtp_host: str = "smtp.gmail.com"
+    smtp_port: int = 587
+    smtp_use_tls: bool = True
+    smtp_username: str = ""    # e.g. you@gmail.com
+    smtp_password: str = ""    # Gmail app password (no spaces)
+    smtp_from_name: str = "ISPPS"
+    smtp_from_email: str = ""  # defaults to smtp_username if empty
+
+    model_config = {"env_file": ".env", "env_file_encoding": "utf-8", "extra": "ignore"}
 
 
 @lru_cache

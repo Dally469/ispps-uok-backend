@@ -86,13 +86,13 @@ The API accepts either:
 - `Authorization: Bearer <jwt>` header, OR
 - `auth_token` HTTP-only cookie (set by `/api/auth/login`).
 
-Default demo credentials (from `db/seed.sql`): password `password123`.
+Default demo credentials (from `db/seed.sql`): password `Password@123`.
 
-| Role     | Sample email          |
-|----------|-----------------------|
-| admin    | `admin@uok.lk`        |
-| lecturer  | `drsilva@uok.lk`      |
-| student  | `ashan@student.uok.lk`|
+| Role     | Sample email          |email               |password
+|----------|-----------------------|--------------------|----------
+| admin    | `admin@uok.lk`        |                    |
+| lecturer  | `drsilva@uok.lk`      |jeanbosco@uk.ac.rw | lecturer1 |
+| student  | `ashan@student.uok.lk`|anatoinette@uk.ac.rw| Student1  |
 
 ---
 

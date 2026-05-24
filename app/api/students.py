@@ -120,6 +120,44 @@ async def create_student(
     }
 
 
+@router.get("/me")
+async def get_my_student_record(
+    db: AsyncSession = Depends(get_db),
+    auth: dict = Depends(require_auth),
+):
+    """Return the logged-in student's record with full enrollments,
+    grades and attendance. Only works for users with role='student'."""
+    if auth.get("role") != "student":
+        raise HTTPException(
+            status_code=403,
+            detail="Only student accounts have a personal profile here",
+        )
+    user_id = uuid.UUID(auth["userId"])
+
+    result = await db.execute(
+        select(Student)
+        .options(
+            joinedload(Student.user),
+            selectinload(Student.enrollments)
+            .joinedload(Enrollment.course)
+            .joinedload(Course.lecturer),
+            selectinload(Student.enrollments)
+            .selectinload(Enrollment.grades),
+            selectinload(Student.enrollments)
+            .selectinload(Enrollment.attendance_records),
+        )
+        .where(Student.user_id == user_id)
+    )
+    student = result.unique().scalar_one_or_none()
+    if not student:
+        raise HTTPException(
+            status_code=404,
+            detail="No student profile linked to your account. Ask an admin.",
+        )
+
+    return await _full_student_payload(db, student)
+
+
 @router.get("/{student_id}")
 async def get_student(
     student_id: uuid.UUID,
@@ -264,6 +302,67 @@ async def delete_student(
 
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
+
+async def _full_student_payload(db: AsyncSession, student: Student) -> dict:
+    """Format a student record with every nested resource the UI needs.
+    Caller must have already loaded enrollments, grades, attendance, user."""
+    user_data = None
+    if student.user:
+        user_data = {
+            "id": str(student.user.id),
+            "email": student.user.email,
+            "full_name": student.user.full_name,
+            "avatar_url": student.user.avatar_url,
+            "role": student.user.role,
+        }
+
+    enrollments_out = []
+    for e in student.enrollments:
+        lecturer_data = None
+        if e.course and e.course.lecturer:
+            lecturer_data = {
+                "id": str(e.course.lecturer.id),
+                "full_name": e.course.lecturer.full_name,
+                "email": e.course.lecturer.email,
+            }
+        course_data = None
+        if e.course:
+            course_data = {**_course_to_dict(e.course), "lecturer": lecturer_data}
+
+        enrollments_out.append({
+            "id": str(e.id),
+            "student_id": str(e.student_id),
+            "course_id": str(e.course_id),
+            "enrolled_at": e.enrolled_at.isoformat() if e.enrolled_at else None,
+            "status": e.status,
+            "course": course_data,
+            "grades": [_grade_to_dict(g) for g in e.grades],
+            "attendance": [_attendance_to_dict(a) for a in e.attendance_records],
+        })
+
+    pred_result = await db.execute(
+        select(Prediction)
+        .where(Prediction.student_id == student.id)
+        .order_by(Prediction.generated_at.desc())
+        .limit(10)
+    )
+    predictions = pred_result.scalars().all()
+    insight_result = await db.execute(
+        select(AiInsight)
+        .where(AiInsight.student_id == student.id)
+        .order_by(AiInsight.created_at.desc())
+        .limit(10)
+    )
+    insights = insight_result.scalars().all()
+
+    return {
+        **_student_to_dict(student),
+        "user": user_data,
+        "enrollments": enrollments_out,
+        "predictions": [_prediction_to_dict(p) for p in predictions],
+        "insights": [_insight_to_dict(i) for i in insights],
+    }
+
 
 def _student_to_dict(s: Student) -> dict:
     return {

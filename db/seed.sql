@@ -5,7 +5,7 @@
 -- School
 -- ============================================================
 insert into schools (id, name, address) values
-  ('a0000000-0000-0000-0000-000000000001', 'University of Kelaniya', 'Dalugama, Kelaniya, Sri Lanka');
+  ('a0000000-0000-0000-0000-000000000001', 'University of Kigali', 'Kigali, Rwanda');
 
 -- ============================================================
 -- Academic Year
