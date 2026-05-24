@@ -49,7 +49,7 @@ class User(Base):
     notifications = relationship("Notification", back_populates="recipient")
 
     __table_args__ = (
-        CheckConstraint("role IN ('admin','teacher','student','parent')", name="ck_users_role"),
+        CheckConstraint("role IN ('admin','lecturer','student')", name="ck_users_role"),
         Index("idx_users_email", "email"),
         Index("idx_users_role", "role"),
     )
@@ -82,7 +82,7 @@ class Course(Base):
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     school_id = Column(UUID(as_uuid=True), ForeignKey("schools.id", ondelete="CASCADE"), nullable=False)
-    teacher_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"))
+    lecturer_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"))
     academic_year_id = Column(UUID(as_uuid=True), ForeignKey("academic_years.id", ondelete="CASCADE"), nullable=False)
     name = Column(Text, nullable=False)
     subject = Column(Text, nullable=False)
@@ -90,13 +90,13 @@ class Course(Base):
     credit_hours = Column(Integer, nullable=False, default=3)
 
     school = relationship("School", back_populates="courses")
-    teacher = relationship("User", foreign_keys=[teacher_id])
+    lecturer = relationship("User", foreign_keys=[lecturer_id])
     academic_year = relationship("AcademicYear", back_populates="courses")
     enrollments = relationship("Enrollment", back_populates="course")
 
     __table_args__ = (
         Index("idx_courses_school", "school_id"),
-        Index("idx_courses_teacher", "teacher_id"),
+        Index("idx_courses_lecturer", "lecturer_id"),
     )
 
 
@@ -120,7 +120,6 @@ class Student(Base):
     enrollments = relationship("Enrollment", back_populates="student")
     predictions = relationship("Prediction", back_populates="student")
     ai_insights = relationship("AiInsight", back_populates="student")
-    parent_links = relationship("ParentLink", back_populates="student")
 
     __table_args__ = (
         CheckConstraint("gender IN ('male','female','other')", name="ck_students_gender"),
@@ -273,24 +272,4 @@ class Notification(Base):
             name="ck_notifications_type",
         ),
         Index("idx_notifications_recipient", "recipient_id"),
-    )
-
-
-# ── Parent Links ─────────────────────────────────────────────────────────────
-
-class ParentLink(Base):
-    __tablename__ = "parent_links"
-
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    parent_user_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
-    student_id = Column(UUID(as_uuid=True), ForeignKey("students.id", ondelete="CASCADE"), nullable=False)
-    relationship_ = Column("relationship", Text, nullable=False)
-    linked_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
-
-    student = relationship("Student", back_populates="parent_links")
-
-    __table_args__ = (
-        UniqueConstraint("parent_user_id", "student_id"),
-        Index("idx_parent_links_parent", "parent_user_id"),
-        Index("idx_parent_links_student", "student_id"),
     )

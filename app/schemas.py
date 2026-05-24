@@ -18,7 +18,7 @@ class RegisterRequest(BaseModel):
     email: EmailStr
     password: str = Field(min_length=6)
     full_name: str = Field(min_length=2)
-    role: Literal["admin", "teacher", "student", "parent"]
+    role: Literal["admin", "lecturer", "student"]
     school_id: uuid.UUID | None = None
 
 
@@ -96,7 +96,7 @@ class GradeCreate(BaseModel):
 
 class CourseCreate(BaseModel):
     school_id: uuid.UUID
-    teacher_id: uuid.UUID | None = None
+    lecturer_id: uuid.UUID | None = None
     academic_year_id: uuid.UUID
     name: str
     subject: str

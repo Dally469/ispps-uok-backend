@@ -1,0 +1,28 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Virtualenvs
+venv/
+.venv/
+env/
+
+# Environment
+.env
+
+# ML artifacts (regenerate locally with `python -m ml.train`)
+ml/artifacts/*
+!ml/artifacts/.gitkeep
+
+# Large datasets (download/unzip locally; too big for GitHub)
+db/datasets/oulad/studentVle.csv
+
+# Editors / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
